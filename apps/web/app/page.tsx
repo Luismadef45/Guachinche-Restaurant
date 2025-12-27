@@ -20,6 +20,10 @@ type QrContext = {
 };
 
 const STORAGE_KEY = "grst.preferredExperience";
+const STORAGE_PATH_KEY = "grst.preferredPath";
+const COOKIE_KEY = "grst.preferredExperience";
+const COOKIE_PATH_KEY = "grst.preferredPath";
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 180;
 
 const EXPERIENCE_KEYS: ExperienceKey[] = [
   "eat-in",
@@ -73,13 +77,40 @@ const MENU_OPTION =
 const isExperienceKey = (value: string | null): value is ExperienceKey =>
   !!value && EXPERIENCE_KEYS.includes(value as ExperienceKey);
 
-const readStoredPreference = (): ExperienceKey | null => {
+const readCookieValue = (key: string): string | null => {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return isExperienceKey(stored) ? stored : null;
+    const match = document.cookie
+      .split("; ")
+      .find((item) => item.startsWith(`${key}=`));
+
+    return match ? decodeURIComponent(match.split("=")[1] ?? "") : null;
   } catch {
     return null;
   }
+};
+
+const writeCookieValue = (key: string, value: string) => {
+  try {
+    document.cookie = `${key}=${encodeURIComponent(
+      value
+    )}; Path=/; Max-Age=${COOKIE_MAX_AGE}; SameSite=Lax`;
+  } catch {
+    // Cookies may be disabled; ignore and continue.
+  }
+};
+
+const readStoredPreference = (): ExperienceKey | null => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (isExperienceKey(stored)) {
+      return stored;
+    }
+  } catch {
+    // Storage may be disabled; ignore and continue.
+  }
+
+  const cookieValue = readCookieValue(COOKIE_KEY);
+  return isExperienceKey(cookieValue) ? cookieValue : null;
 };
 
 const writeStoredPreference = (value: ExperienceKey) => {
@@ -88,6 +119,18 @@ const writeStoredPreference = (value: ExperienceKey) => {
   } catch {
     // Storage may be disabled; ignore and continue.
   }
+
+  writeCookieValue(COOKIE_KEY, value);
+};
+
+const writeStoredPath = (value: string) => {
+  try {
+    localStorage.setItem(STORAGE_PATH_KEY, value);
+  } catch {
+    // Storage may be disabled; ignore and continue.
+  }
+
+  writeCookieValue(COOKIE_PATH_KEY, value);
 };
 
 const detectQrContext = (): QrContext => {
@@ -114,19 +157,23 @@ export default function LandingPage() {
     const stored = readStoredPreference();
     const qr = detectQrContext();
 
+    setQrContext(qr);
+
     if (stored) {
       setLastSelection(stored);
     }
 
     if (qr.isQr) {
+      const eatInHref = qr.query ? `/eat-in${qr.query}` : "/eat-in";
       writeStoredPreference("eat-in");
+      writeStoredPath(eatInHref);
       setSelected("eat-in");
-    } else {
-      setSelected(stored);
+      router.replace(eatInHref);
+      return;
     }
 
-    setQrContext(qr);
-  }, []);
+    setSelected(stored);
+  }, [router]);
 
   const selectedOption = useMemo(
     () => OPTIONS.find((option) => option.key === selected) || null,
@@ -140,6 +187,7 @@ export default function LandingPage() {
         : option.href;
 
     writeStoredPreference(option.key);
+    writeStoredPath(href);
     setSelected(option.key);
     router.push(href);
   };
