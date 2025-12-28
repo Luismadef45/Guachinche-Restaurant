@@ -46,6 +46,49 @@ const PERMISSION_SEEDS = [
   { key: "staff.write", description: "Manage staff schedules." }
 ];
 
+const ROLE_PERMISSION_MAP: Record<string, string[]> = {
+  Customer: ["menu.read", "booking.read", "order.read"],
+  Waiter: ["menu.read", "booking.read", "booking.write", "order.read", "order.write"],
+  Chef: ["menu.read", "order.read", "order.write", "inventory.read"],
+  "Shift Manager": [
+    "menu.read",
+    "menu.write",
+    "booking.read",
+    "booking.write",
+    "order.read",
+    "order.write",
+    "inventory.read",
+    "inventory.write",
+    "staff.read",
+    "staff.write"
+  ],
+  "General Manager": [
+    "menu.read",
+    "menu.write",
+    "booking.read",
+    "booking.write",
+    "order.read",
+    "order.write",
+    "inventory.read",
+    "inventory.write",
+    "staff.read",
+    "staff.write"
+  ],
+  "Admin/Owner": [
+    "menu.read",
+    "menu.write",
+    "booking.read",
+    "booking.write",
+    "order.read",
+    "order.write",
+    "inventory.read",
+    "inventory.write",
+    "staff.read",
+    "staff.write"
+  ],
+  "Accountant/Analyst": ["menu.read", "booking.read", "order.read", "inventory.read", "staff.read"]
+};
+
 async function seedRolesAndPermissions() {
   for (const role of ROLE_SEEDS) {
     await prisma.role.upsert({
@@ -61,6 +104,31 @@ async function seedRolesAndPermissions() {
       update: { description: permission.description },
       create: permission
     });
+  }
+
+  const permissions = await prisma.permission.findMany();
+  const permissionByKey = new Map(permissions.map((perm) => [perm.key, perm.id]));
+
+  for (const [roleName, permissionKeys] of Object.entries(ROLE_PERMISSION_MAP)) {
+    const role = await prisma.role.findUnique({ where: { name: roleName } });
+    if (!role) {
+      continue;
+    }
+
+    const rolePermissions = permissionKeys
+      .map((key) => permissionByKey.get(key))
+      .filter((permissionId): permissionId is string => !!permissionId)
+      .map((permissionId) => ({
+        roleId: role.id,
+        permissionId
+      }));
+
+    if (rolePermissions.length) {
+      await prisma.rolePermission.createMany({
+        data: rolePermissions,
+        skipDuplicates: true
+      });
+    }
   }
 }
 

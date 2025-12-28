@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import RegistrationModal from "../components/RegistrationModal";
+import LoginModal from "../components/LoginModal";
 
 type ExperienceKey = "eat-in" | "takeaway" | "delivery" | "book" | "menu";
 
@@ -19,19 +21,20 @@ type QrContext = {
   query: string;
 };
 
+type StoredUser = {
+  firstName?: string;
+  lastName?: string;
+  roles?: string[];
+  permissions?: string[];
+};
+
 const STORAGE_KEY = "grst.preferredExperience";
 const STORAGE_PATH_KEY = "grst.preferredPath";
 const COOKIE_KEY = "grst.preferredExperience";
 const COOKIE_PATH_KEY = "grst.preferredPath";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 180;
 
-const EXPERIENCE_KEYS: ExperienceKey[] = [
-  "eat-in",
-  "takeaway",
-  "delivery",
-  "book",
-  "menu"
-];
+const EXPERIENCE_KEYS: ExperienceKey[] = ["eat-in", "takeaway", "delivery", "book", "menu"];
 
 const OPTIONS: ExperienceOption[] = [
   {
@@ -71,17 +74,14 @@ const OPTIONS: ExperienceOption[] = [
   }
 ];
 
-const MENU_OPTION =
-  OPTIONS.find((option) => option.key === "menu") ?? OPTIONS[0];
+const MENU_OPTION = OPTIONS.find((option) => option.key === "menu") ?? OPTIONS[0];
 
 const isExperienceKey = (value: string | null): value is ExperienceKey =>
   !!value && EXPERIENCE_KEYS.includes(value as ExperienceKey);
 
 const readCookieValue = (key: string): string | null => {
   try {
-    const match = document.cookie
-      .split("; ")
-      .find((item) => item.startsWith(`${key}=`));
+    const match = document.cookie.split("; ").find((item) => item.startsWith(`${key}=`));
 
     return match ? decodeURIComponent(match.split("=")[1] ?? "") : null;
   } catch {
@@ -135,8 +135,7 @@ const writeStoredPath = (value: string) => {
 
 const detectQrContext = (): QrContext => {
   const params = new URLSearchParams(window.location.search);
-  const isQr =
-    params.has("table") || params.has("session") || params.get("qr") === "1";
+  const isQr = params.has("table") || params.has("session") || params.get("qr") === "1";
   const table = params.get("table");
   const query = isQr && params.toString().length ? `?${params.toString()}` : "";
 
@@ -147,6 +146,9 @@ export default function LandingPage() {
   const router = useRouter();
   const [selected, setSelected] = useState<ExperienceKey | null>(null);
   const [lastSelection, setLastSelection] = useState<ExperienceKey | null>(null);
+  const [isRegistrationModalOpen, setIsRegistrationModalOpen] = useState(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<StoredUser | null>(null);
   const [qrContext, setQrContext] = useState<QrContext>({
     isQr: false,
     table: null,
@@ -175,6 +177,25 @@ export default function LandingPage() {
     setSelected(stored);
   }, [router]);
 
+  useEffect(() => {
+    try {
+      const storedUser = localStorage.getItem("user");
+      setCurrentUser(storedUser ? (JSON.parse(storedUser) as StoredUser) : null);
+    } catch {
+      setCurrentUser(null);
+    }
+  }, []);
+
+  const canViewStaff = !!currentUser?.permissions?.includes("staff.read");
+  const handleAuthSuccess = () => {
+    try {
+      const storedUser = localStorage.getItem("user");
+      setCurrentUser(storedUser ? (JSON.parse(storedUser) as StoredUser) : null);
+    } catch {
+      setCurrentUser(null);
+    }
+  };
+
   const selectedOption = useMemo(
     () => OPTIONS.find((option) => option.key === selected) || null,
     [selected]
@@ -182,9 +203,7 @@ export default function LandingPage() {
 
   const handleSelect = (option: ExperienceOption) => {
     const href =
-      option.key === "eat-in" && qrContext.query
-        ? `${option.href}${qrContext.query}`
-        : option.href;
+      option.key === "eat-in" && qrContext.query ? `${option.href}${qrContext.query}` : option.href;
 
     writeStoredPreference(option.key);
     writeStoredPath(href);
@@ -198,6 +217,32 @@ export default function LandingPage() {
         <div className="brand">
           Guachinche
           <span>Restaurant OS</span>
+        </div>
+        <div className="nav-actions">
+          <button
+            className="nav-button"
+            type="button"
+            disabled={!canViewStaff}
+            onClick={() => {
+              if (canViewStaff) {
+                router.push("/staff");
+              } else {
+                setIsLoginModalOpen(true);
+              }
+            }}
+          >
+            Staff tools
+          </button>
+          <button className="nav-button" type="button" onClick={() => setIsLoginModalOpen(true)}>
+            Log In
+          </button>
+          <button
+            className="nav-button nav-button-primary"
+            type="button"
+            onClick={() => setIsRegistrationModalOpen(true)}
+          >
+            Register
+          </button>
         </div>
       </header>
 
@@ -214,8 +259,8 @@ export default function LandingPage() {
         )}
         <h1 className="hero-title">Choose how you want to dine today.</h1>
         <p className="hero-subtitle">
-          Your experience stays smooth for guests and staff. Pick a path to book,
-          order, or explore the menu.
+          Your experience stays smooth for guests and staff. Pick a path to book, order, or explore
+          the menu.
         </p>
         <div className="hero-actions">
           {selectedOption ? (
@@ -238,9 +283,7 @@ export default function LandingPage() {
           </button>
         </div>
         {lastSelection && !qrContext.isQr ? (
-          <div className="hero-hint">
-            Last time you chose {lastSelection.replace("-", " ")}.
-          </div>
+          <div className="hero-hint">Last time you chose {lastSelection.replace("-", " ")}.</div>
         ) : null}
       </section>
 
@@ -286,6 +329,17 @@ export default function LandingPage() {
         <span>Guachinche Restaurant OS</span>
         <span>Need help? Ask a waiter or manager for assistance.</span>
       </footer>
+
+      <RegistrationModal
+        isOpen={isRegistrationModalOpen}
+        onClose={() => setIsRegistrationModalOpen(false)}
+        onSuccess={handleAuthSuccess}
+      />
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        onSuccess={handleAuthSuccess}
+      />
     </main>
   );
 }

@@ -89,8 +89,12 @@ model User {
   email         String           @unique
   firstName     String
   lastName      String
+  passwordHash  String
+  passwordUpdatedAt DateTime     @default(now())
   phone         String?
   isActive      Boolean          @default(true)
+  mfaEnabled    Boolean          @default(false)
+  mfaSecret     String?
   roles         UserRole[]
   bookings      Booking[]
   orders        Order[]
@@ -98,6 +102,10 @@ model User {
   testimonials  Testimonial[]
   clockEvents   ClockEvent[]
   rotas         Rota[]
+  sessions      Session[]
+  passwordResetTokens PasswordResetToken[]
+  mfaEnrollments MfaEnrollment[]
+  auditLogs     AuditLog[]
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 }
@@ -366,4 +374,60 @@ model MenuItemIngredient {
   ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
 
   @@id([menuItemId, ingredientId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  ipAddress String?
+  userAgent String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model MfaEnrollment {
+  id        String   @id @default(cuid())
+  userId    String
+  secret    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  targetType String
+  targetId   String?
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  createdAt  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([action])
 }

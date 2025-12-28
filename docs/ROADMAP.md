@@ -68,7 +68,7 @@ Context
 
 ## TASK-05-AUTH-RBAC - Authentication and permissions
 
-Status: [ ] Not started
+Status: [x] Done
 Context
 
 - Roles: Customer, Waiter, Chef, Shift Manager, General Manager, Admin/Owner,
