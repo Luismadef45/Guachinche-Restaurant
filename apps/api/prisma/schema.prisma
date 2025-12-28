@@ -1,0 +1,369 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  SEATED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum OrderChannel {
+  EAT_IN
+  TAKEAWAY
+  DELIVERY
+}
+
+enum OrderStatus {
+  NEW
+  ACCEPTED
+  IN_PROGRESS
+  READY
+  COMPLETED
+  CANCELLED
+}
+
+enum TicketStatus {
+  ACCEPTED
+  IN_PREP
+  READY
+  SERVED
+  CANCELLED
+}
+
+enum TestimonialStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ClockEventType {
+  CLOCK_IN
+  CLOCK_OUT
+  BREAK_START
+  BREAK_END
+}
+
+enum RotaStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+model RestaurantLocation {
+  id           String           @id @default(cuid())
+  name         String
+  slug         String           @unique
+  timezone     String
+  addressLine1 String
+  addressLine2 String?
+  city         String
+  region       String?
+  postalCode   String?
+  country      String
+  phone        String?
+  email        String?
+  tables       Table[]
+  bookings     Booking[]
+  menuItems    MenuItem[]
+  modifiers    Modifier[]
+  orders       Order[]
+  inventory    InventoryBatch[]
+  shifts       Shift[]
+  rotas        Rota[]
+  clockEvents  ClockEvent[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+}
+
+model User {
+  id            String           @id @default(cuid())
+  email         String           @unique
+  firstName     String
+  lastName      String
+  phone         String?
+  isActive      Boolean          @default(true)
+  roles         UserRole[]
+  bookings      Booking[]
+  orders        Order[]
+  loyaltyWallet LoyaltyWallet?
+  testimonials  Testimonial[]
+  clockEvents   ClockEvent[]
+  rotas         Rota[]
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+}
+
+model Role {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  description String?
+  users       UserRole[]
+  permissions RolePermission[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  key         String           @unique
+  description String?
+  roles       RolePermission[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model Table {
+  id        String         @id @default(cuid())
+  locationId String
+  name      String
+  capacity  Int
+  isActive  Boolean        @default(true)
+  bookings  BookingTable[]
+  orders    Order[]
+  location  RestaurantLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@unique([locationId, name])
+  @@map("tables")
+}
+
+model Booking {
+  id            String         @id @default(cuid())
+  locationId    String
+  userId        String?
+  status        BookingStatus  @default(PENDING)
+  partySize     Int
+  startTime     DateTime
+  endTime       DateTime?
+  customerName  String
+  customerEmail String?
+  customerPhone String?
+  notes         String?
+  location      RestaurantLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  user          User?          @relation(fields: [userId], references: [id])
+  tables        BookingTable[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model BookingTable {
+  bookingId String
+  tableId   String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  table     Table   @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  @@id([bookingId, tableId])
+}
+
+model MenuItem {
+  id          String              @id @default(cuid())
+  locationId  String
+  name        String
+  description String?
+  price       Decimal             @db.Decimal(10, 2)
+  isActive    Boolean             @default(true)
+  location    RestaurantLocation  @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  modifiers   MenuItemModifier[]
+  allergens   MenuItemAllergen[]
+  ingredients MenuItemIngredient[]
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+}
+
+model Modifier {
+  id          String              @id @default(cuid())
+  locationId  String
+  name        String
+  description String?
+  priceDelta  Decimal             @db.Decimal(10, 2)
+  isActive    Boolean             @default(true)
+  location    RestaurantLocation  @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  menuItems   MenuItemModifier[]
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+}
+
+model Allergen {
+  id        String              @id @default(cuid())
+  name      String
+  code      String?             @unique
+  menuItems MenuItemAllergen[]
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+}
+
+model Ingredient {
+  id         String               @id @default(cuid())
+  name       String
+  unit       String
+  menuItems  MenuItemIngredient[]
+  inventory  InventoryBatch[]
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+}
+
+model InventoryBatch {
+  id           String              @id @default(cuid())
+  locationId   String
+  ingredientId String
+  quantity     Decimal             @db.Decimal(10, 2)
+  receivedAt   DateTime            @default(now())
+  expiresAt    DateTime?
+  location     RestaurantLocation  @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  ingredient   Ingredient          @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+}
+
+model Order {
+  id         String       @id @default(cuid())
+  locationId String
+  tableId    String?
+  customerId String?
+  channel    OrderChannel
+  status     OrderStatus  @default(NEW)
+  total      Decimal      @db.Decimal(10, 2)
+  notes      String?
+  location   RestaurantLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  table      Table?       @relation(fields: [tableId], references: [id])
+  customer   User?        @relation(fields: [customerId], references: [id])
+  ticket     Ticket?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+}
+
+model Ticket {
+  id        String       @id @default(cuid())
+  orderId   String       @unique
+  status    TicketStatus @default(ACCEPTED)
+  order     Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+}
+
+model LoyaltyWallet {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  pointsBalance Int      @default(0)
+  tier          String?
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Campaign {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  startsAt    DateTime
+  endsAt      DateTime?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Testimonial {
+  id        String             @id @default(cuid())
+  userId    String?
+  name      String
+  rating    Int
+  message   String
+  status    TestimonialStatus  @default(PENDING)
+  user      User?              @relation(fields: [userId], references: [id])
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+}
+
+model Shift {
+  id         String             @id @default(cuid())
+  locationId String
+  name       String
+  startTime  DateTime
+  endTime    DateTime
+  location   RestaurantLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  rotas      Rota[]
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+}
+
+model ClockEvent {
+  id         String         @id @default(cuid())
+  locationId String
+  userId     String
+  type       ClockEventType
+  occurredAt DateTime       @default(now())
+  location   RestaurantLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+}
+
+model Rota {
+  id         String      @id @default(cuid())
+  locationId String
+  userId     String
+  shiftId    String
+  date       DateTime
+  status     RotaStatus  @default(SCHEDULED)
+  notes      String?
+  location   RestaurantLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shift      Shift       @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+model MenuItemModifier {
+  menuItemId String
+  modifierId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  modifier   Modifier @relation(fields: [modifierId], references: [id], onDelete: Cascade)
+
+  @@id([menuItemId, modifierId])
+}
+
+model MenuItemAllergen {
+  menuItemId String
+  allergenId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  allergen   Allergen @relation(fields: [allergenId], references: [id], onDelete: Cascade)
+
+  @@id([menuItemId, allergenId])
+}
+
+model MenuItemIngredient {
+  menuItemId   String
+  ingredientId String
+  menuItem     MenuItem   @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  @@id([menuItemId, ingredientId])
+}
